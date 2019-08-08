@@ -104,3 +104,6 @@ venv.bak/
 .mypy_cache/
 train_net*.*
 snapshots
+
+# vscode
+.vscode
