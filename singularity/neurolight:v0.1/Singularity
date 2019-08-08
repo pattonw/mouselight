@@ -41,7 +41,11 @@ conda install python=3.6
 # install tensorflow
 
 conda install tensorflow-gpu
+# conda install tensorflow-gpu
 conda info -a
+
+# install z5py
+conda install -c conda-forge z5py
 
 # dependencies for mouselight
 
@@ -78,16 +82,16 @@ git checkout ${ZARR_REVISION}
 pip install -r requirements.txt
 python setup.py install
 
-GUNPOWDER_ROOT=/src/gunpowder
-GUNPOWDER_REPOSITORY=https://github.com/pattonw/gunpowder
-GUNPOWDER_REVISION=c4f266bcb3851e58ddfe99f8eef4a1d5d48a9ca8
-
-cd ${GUNPOWDER_ROOT}
-git clone ${GUNPOWDER_REPOSITORY} . && \
-git checkout ${GUNPOWDER_REVISION}
-pip install -r requirements.txt
-python setup.py build_ext --inplace
-PYTHONPATH=${GUNPOWDER_ROOT}:$PYTHONPATH
+# GUNPOWDER_ROOT=/src/gunpowder
+# GUNPOWDER_REPOSITORY=https://github.com/pattonw/gunpowder
+# GUNPOWDER_REVISION=0107124398757a4bbb725d15531b7c2b6e10ad17
+# 
+# cd ${GUNPOWDER_ROOT}
+# git clone ${GUNPOWDER_REPOSITORY} . && \
+# git checkout ${GUNPOWDER_REVISION}
+# pip install -r requirements.txt
+# python setup.py build_ext --inplace
+# PYTHONPATH=${GUNPOWDER_ROOT}:$PYTHONPATH
 
 DAISY_ROOT=/src/daisy
 DAISY_REPOSITORY=https://github.com/funkelab/daisy
@@ -111,16 +115,18 @@ pip install -r requirements.txt
 python setup.py build_ext --inplace
 PYTHONPATH=${FUNLIB_ROOT}:$PYTHONPATH
 
-NEUROLIGHT_ROOT=/src/neurolight
-NEUROLIGHT_REPOSITORY=https://github.com/pattonw/neurolight
-NEUROLIGHT_REVISION=7c0a6e8759b774871a9d5c63dc9b5ff3005d9b42
-
-cd ${NEUROLIGHT_ROOT}
-git clone ${NEUROLIGHT_REPOSITORY} . && \
-git checkout ${NEUROLIGHT_REVISION}
-pip install -r requirements.txt
-python setup.py build_ext --inplace
-PYTHONPATH=${NEUROLIGHT_ROOT}:$PYTHONPATH
+# Install neurolight locally, that way I don't need to rebuild
+# this container every time I change something
+# NEUROLIGHT_ROOT=/src/neurolight
+# NEUROLIGHT_REPOSITORY=https://github.com/pattonw/neurolight
+# NEUROLIGHT_REVISION=f6bfb12c9d9ebecca47f32372f075ef3c88800b3
+# 
+# cd ${NEUROLIGHT_ROOT}
+# git clone ${NEUROLIGHT_REPOSITORY} . && \
+# git checkout ${NEUROLIGHT_REVISION}
+# pip install -r requirements.txt
+# python setup.py build_ext --inplace
+# PYTHONPATH=${NEUROLIGHT_ROOT}:$PYTHONPATH
 
 pip install mahotas
 pip install pymongo

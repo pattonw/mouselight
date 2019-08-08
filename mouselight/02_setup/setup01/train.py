@@ -1,7 +1,14 @@
 from __future__ import print_function
 import numpy as np
 import gunpowder as gp
-from neurolight.gunpowder import FusionAugment, SwcFileSource, RasterizeSkeleton, GrowLabels, GetNeuronPair, Recenter
+from neurolight.gunpowder import (
+    FusionAugment,
+    SwcFileSource,
+    RasterizeSkeleton,
+    GrowLabels,
+    GetNeuronPair,
+    Recenter,
+)
 import json
 import logging
 import tensorflow as tf
@@ -10,8 +17,8 @@ import math
 
 sample_directory = "/nrs/funke/mouselight-v2"
 
-class BinarizeGt(gp.BatchFilter):
 
+class BinarizeGt(gp.BatchFilter):
     def __init__(self, gt, gt_binary):
 
         self.gt = gt
@@ -31,16 +38,14 @@ class BinarizeGt(gp.BatchFilter):
         spec = batch[self.gt].spec.copy()
         spec.dtype = np.int32
 
-        binarized = gp.Array(
-            data=(batch[self.gt].data > 0).astype(np.int32),
-            spec=spec)
+        binarized = gp.Array(data=(batch[self.gt].data > 0).astype(np.int32), spec=spec)
 
         batch[self.gt_binary] = binarized
 
 
-with open('train_net_config.json', 'r') as f:
+with open("train_net_config.json", "r") as f:
     net_config = json.load(f)
-with open('train_net_names.json', 'r') as f:
+with open("train_net_names.json", "r") as f:
     net_names = json.load(f)
 
 
@@ -54,25 +59,22 @@ def train_until(max_iteration):
         if trained_until >= max_iteration:
             return
 
-    # array keys for data sources
+    # array keys for fused volume
     raw = gp.ArrayKey('RAW')
-    swcs = gp.PointsKey('swcs')
     labels = gp.ArrayKey('LABELS')
+    labels_fg = gp.ArrayKey('LABELS_FG')
 
     # array keys for base volume
     raw_base = gp.ArrayKey('RAW_BASE')
     labels_base = gp.ArrayKey('LABELS_BASE')
     swc_base = gp.PointsKey('SWC_BASE')
+    swc_center_base = gp.PointsKey('SWC_CENTER_BASE')
 
     # array keys for add volume
     raw_add = gp.ArrayKey('RAW_ADD')
     labels_add = gp.ArrayKey('LABELS_ADD')
     swc_add = gp.PointsKey('SWC_ADD')
-
-    # array keys for fused volume
-    raw_fused = gp.ArrayKey('RAW_FUSED')
-    labels_fused = gp.ArrayKey('LABELS_FUSED')
-    swc_fused = gp.PointsKey('SWC_FUSED')
+    swc_center_add = gp.PointsKey('SWC_CENTER_ADD')
 
     # output data
     fg = gp.ArrayKey('FG')
@@ -89,6 +91,8 @@ def train_until(max_iteration):
     request.add(labels, output_size)
     request.add(labels_fg, output_size)
     request.add(loss_weights, output_size)
+    request.add(swc_center_base, output_size)
+    request.add(swc_center_add, output_size)
 
     # add snapshot request
     snapshot_request = gp.BatchRequest()
@@ -101,39 +105,70 @@ def train_until(max_iteration):
     snapshot_request.add(labels_add, input_size)
 
     # data source for "base" volume
-    data_sources = tuple(
+    data_sources_base = tuple(
         (
-            gp.N5Source(
-                str((filename/"raw").absolute()),
+            gp.Hdf5Source(
+                filename,
                 datasets={
-                    raw: 'volume',
+                    raw_base: '/volume',
                 },
                 array_specs={
-                    raw: gp.ArraySpec(interpolatable=True, voxel_size=voxel_size, dtype=np.uint16),
-                }
+                    raw_base: gp.ArraySpec(interpolatable=True, voxel_size=voxel_size, dtype=np.uint16),
+                },
+                channels_first=False
             ),
-            SwcFileSource(
-                filename=str((filename/"swcs").absolute()),
-                points=(swcs),
-                scale=voxel_size,
-                transpose=(2,1,0),
+            SwcSource(
+                filename=filename,
+                dataset='/reconstruction',
+                points=(swc_center_base, swc_base),
+                scale=voxel_size
             )
         ) +
         gp.MergeProvider() +
-        gp.RandomLocation(ensure_centered=swcs) +
+        gp.RandomLocation(ensure_nonempty=swc_center_base) +
         RasterizeSkeleton(
-            points=swcs,
-            array=labels,
+            points=swc_base,
+            array=labels_base,
             array_spec=gp.ArraySpec(interpolatable=False, voxel_size=voxel_size, dtype=np.uint32),
+            radius=5.0)
+        for filename in files
+    )
+
+    # data source for "add" volume
+    data_sources_add = tuple(
+        (
+            gp.Hdf5Source(
+                file,
+                datasets={
+                    raw_add: '/volume',
+                },
+                array_specs={
+                    raw_add: gp.ArraySpec(interpolatable=True, voxel_size=voxel_size, dtype=np.uint16),
+                },
+                channels_first=False
+            ),
+            SwcSource(
+                filename=file,
+                dataset='/reconstruction',
+                points=(swc_center_add, swc_add),
+                scale=voxel_size
+            )
         ) +
-        GrowLabels(labels, radius=5)
-        for filename in Path(sample_dir).iterdir()
-    ) 
+        gp.MergeProvider() +
+        gp.RandomLocation(ensure_nonempty=swc_center_add) +
+        RasterizeSkeleton(points=swc_add,
+                          array=labels_add,
+                          array_spec=gp.ArraySpec(interpolatable=False, voxel_size=voxel_size, dtype=np.uint32),
+                          radius=5.0)
+        for file in files
+    )
+    data_sources = (
+        (data_sources_base + gp.RandomProvider()),
+        (data_sources_add + gp.RandomProvider())
+    ) + gp.MergeProvider()
 
     pipeline = (
             data_sources +
-            RandomLocation() +
-            GetNeuronPair() +
             FusionAugment(
                 raw_base,
                 raw_add,
@@ -141,7 +176,7 @@ def train_until(max_iteration):
                 labels_add,
                 raw,
                 labels,
-                blend_mode='intensity',
+                blend_mode='labels_mask',
                 blend_smoothness=10,
                 num_blended_objects=0) +
 
