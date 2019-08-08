@@ -1,1 +1,0 @@
-{"loss": "mean_squared_error/value:0", "raw": "Placeholder:0", "fg": "Reshape_1:0", "optimizer": "Adam", "loss_weights": "Placeholder_2:0", "labels_fg": "Placeholder_1:0"}
