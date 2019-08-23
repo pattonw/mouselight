@@ -41,7 +41,7 @@ parser.add_argument(
     action="store",
     dest="minutes",
     default=0,
-    help="How long you want neuroglancer to stay available"
+    help="How long you want neuroglancer to stay available",
 )
 parser.add_argument(
     "--output",
@@ -50,7 +50,7 @@ parser.add_argument(
     action="store",
     dest="log",
     default="",
-    help="Where to output url to"
+    help="Where to output url to",
 )
 
 args = parser.parse_args()
@@ -68,14 +68,17 @@ neuroglancer.set_server_bind_address("0.0.0.0")
 viewer = neuroglancer.Viewer()
 
 swc_path = Path(
-    "/nrs/funke/mouselight-v2/2018-08-01",
+    "/nrs/funke/mouselight-v2/2017-07-02",
     "consensus-neurons-with-machine-centerpoints-labelled-as-swcs/G-002.swc",
 )
+swc_path = Path(
+    "/groups/mousebrainmicro/mousebrainmicro/cluster/2018-07-02/carver/augmented-with-skeleton-nodes-as-swcs/G-002.swc"
+)
 n5_path = Path(
-    "/nrs/funke/mouselight-v2/2018-08-01",
+    "/nrs/funke/mouselight-v2/2018-07-02",
     "consensus-neurons-with-machine-centerpoints-labelled-as-swcs-carved.n5/",
 )
-transform = Path("/nrs/mouselight/SAMPLES/2018-08-01/transform.txt")
+transform = Path("/nrs/mouselight/SAMPLES/2018-07-02/transform.txt")
 
 
 def load_transform(transform_path: Path):
@@ -112,6 +115,7 @@ voxel_size_rounded = np.array((10, 3, 3)[::-1])
 
 nodes = []
 edges = []
+print(len(neuron_graph.nodes))
 for node_a, node_b in neuron_graph.edges:
     a = swc_to_voxel_coords(neuron_graph.nodes[node_a]["location"], origin, spacing)
     b = swc_to_voxel_coords(neuron_graph.nodes[node_b]["location"], origin, spacing)
@@ -127,6 +131,8 @@ for node_a, node_b in neuron_graph.edges:
     edges.append(
         neuroglancer.LineAnnotation(point_a=pos_u, point_b=pos_v, id=next(ngid))
     )
+    if len(nodes) > 10000:
+        break
 nodes.append(
     neuroglancer.EllipsoidAnnotation(
         center=pos_v, radii=(1, 1, 1) / voxel_size, id=next(ngid)
@@ -137,7 +143,7 @@ nodes.append(
 a = daisy.open_ds(str(n5_path.absolute()), "volume")
 
 with viewer.txn() as s:
-    add_layer(s, a, "volume", shader="rgb", c=[0,0,0])
+    add_layer(s, a, "volume", shader="rgb", c=[0, 0, 0])
 
 with viewer.txn() as s:
     s.layers["edges"] = neuroglancer.AnnotationLayer(
@@ -151,10 +157,11 @@ url = str(viewer)
 logging.info(url)
 
 import time
-time.sleep(60*minutes)
+
+time.sleep(60 * minutes)
 
 try:
     if minutes < 1:
-    	input("Press ENTER to exit:")
+        input("Press ENTER to exit:")
 except:
     pass

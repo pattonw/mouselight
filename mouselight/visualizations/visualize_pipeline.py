@@ -16,7 +16,8 @@ import numpy as np
 import sys
 
 
-SEPERATE_DISTANCE = int(sys.argv[1])
+SEPERATE_DISTANCE = [100, 130]
+SCALE_ADD_VOLUME = True
 
 
 class BinarizeGt(gp.BatchFilter):
@@ -105,6 +106,9 @@ swc_add = gp.PointsKey("SWC_ADD")
 raw_fused = gp.ArrayKey("RAW_FUSED")
 labels_fused = gp.ArrayKey("LABELS_FUSED")
 swc_fused = gp.PointsKey("SWC_FUSED")
+raw_fused_b = gp.ArrayKey("RAW_FUSED_B")
+labels_fused_b = gp.ArrayKey("LABELS_FUSED_B")
+swc_fused_b = gp.PointsKey("SWC_FUSED_B")
 
 # output data
 labels_fg = gp.ArrayKey("LABELS_FG")
@@ -166,9 +170,7 @@ data_sources = tuple(
         ),
     )
     + gp.MergeProvider()
-    + gp.RandomLocation(
-        ensure_nonempty=swcs, ensure_centered=True, voxel_size=voxel_size
-    )
+    + gp.RandomLocation(ensure_nonempty=swcs, ensure_centered=True)
     + RasterizeSkeleton(
         points=swcs,
         array=labels,
@@ -178,13 +180,7 @@ data_sources = tuple(
     )
     + GrowLabels(labels, radius=10)
     # augment
-    + gp.ElasticAugment(
-        [40, 10, 10],
-        [0.25, 1, 1],
-        [0, math.pi / 2.0],
-        subsample=4,
-        voxel_size=voxel_size,
-    )
+    + gp.ElasticAugment([40, 10, 10], [0.25, 1, 1], [0, math.pi / 2.0], subsample=4)
     + gp.SimpleAugment(mirror_only=[1, 2], transpose_only=[1, 2])
     + gp.Normalize(raw)
     + gp.IntensityAugment(raw, 0.9, 1.1, -0.001, 0.001)
@@ -219,12 +215,27 @@ pipeline = (
         blend_mode="labels_mask",
         blend_smoothness=10,
         num_blended_objects=0,
+        scale_add_volume=True,
     )
-    + Crop(labels_fused, labels_fg)
-    + BinarizeGt(labels_fg, labels_fg_bin)
-    + gp.BalanceLabels(labels_fg_bin, loss_weights)
+    + FusionAugment(
+        raw_base,
+        raw_add,
+        labels_base,
+        labels_add,
+        swc_base,
+        swc_add,
+        raw_fused_b,
+        labels_fused_b,
+        swc_fused_b,
+        blend_mode="labels_mask",
+        blend_smoothness=10,
+        num_blended_objects=0,
+        scale_add_volume=False,
+    )
     + gp.Snapshot(
-        output_filename="snapshot_{}_{}.hdf".format(SEPERATE_DISTANCE, "{iteration}"),
+        output_filename="snapshot_scale_comparison_{}_{}.hdf".format(
+            int(np.mean(SEPERATE_DISTANCE)), "{iteration}"
+        ),
         dataset_names={
             raw_fused: "volumes/raw_fused",
             raw_base: "volumes/raw_base",
@@ -232,35 +243,34 @@ pipeline = (
             labels_fused: "volumes/labels_fused",
             labels_base: "volumes/labels_base",
             labels_add: "volumes/labels_add",
-            labels_fg_bin: "volumes/labels_fg_bin",
+            raw_fused_b: "volumes/raw_fused_b",
+            labels_fused_b: "volumes/labels_fused_b",
         },
         every=1,
     )
 )
 
-request = BatchRequest()
-
-# add request
-request = gp.BatchRequest()
-request.add(raw_fused, input_size)
-request.add(labels_fused, input_size)
-request.add(swc_fused, input_size)
-request.add(labels_fg, output_size)
-request.add(labels_fg_bin, output_size)
-request.add(loss_weights, output_size)
-
-# add snapshot request
-# request.add(fg, output_size)
-# request.add(labels_fg, output_size)
-# request.add(gradient_fg, output_size)
-request.add(raw_base, input_size)
-request.add(raw_add, input_size)
-request.add(labels_base, input_size)
-request.add(labels_add, input_size)
-request.add(swc_base, input_size)
-request.add(swc_add, input_size)
-
 with build(pipeline):
-    t1 = time.time()
-    for _ in range(1):
+    for i in range(1):
+        request = BatchRequest(random_seed=i)
+
+        # add request
+        request = gp.BatchRequest()
+        request.add(raw_fused, input_size)
+        request.add(labels_fused, input_size)
+        request.add(swc_fused, input_size)
+        request.add(raw_fused_b, input_size)
+        request.add(labels_fused_b, input_size)
+        request.add(swc_fused_b, input_size)
+
+        # add snapshot request
+        # request.add(fg, output_size)
+        # request.add(labels_fg, output_size)
+        # request.add(gradient_fg, output_size)
+        request.add(raw_base, input_size)
+        request.add(raw_add, input_size)
+        request.add(labels_base, input_size)
+        request.add(labels_add, input_size)
+        request.add(swc_base, input_size)
+        request.add(swc_add, input_size)
         pipeline.request_batch(request)

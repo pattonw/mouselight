@@ -14,11 +14,6 @@ import gunpowder as gp
 import numpy as np
 import itertools
 
-logging.basicConfig(
-    level=logging.DEBUG,
-    filename="log.txt",
-)
-
 from neurolight.gunpowder import FusionAugment, RasterizeSkeleton
 from neurolight.gunpowder.mouselight_swc_file_source import MouselightSwcFileSource
 from neurolight.gunpowder.get_neuron_pair import GetNeuronPair
@@ -262,7 +257,7 @@ def train_until(max_iteration):
         )
         + gp.MergeProvider()
         + gp.RandomLocation(
-            ensure_nonempty=swcs, ensure_centered=True, voxel_size=voxel_size
+            ensure_nonempty=swcs, ensure_centered=True
         )
         + RasterizeSkeleton(
             points=swcs,
@@ -278,7 +273,6 @@ def train_until(max_iteration):
             [0.25, 1, 1],
             [0, math.pi / 2.0],
             subsample=4,
-            voxel_size=voxel_size,
         )
         + gp.SimpleAugment(mirror_only=[1, 2], transpose_only=[1, 2])
         + gp.Normalize(raw)
@@ -380,8 +374,10 @@ def points_to_graph(points):
 
 
 if __name__ == "__main__":
+    for handler in logging.root.handlers[:]:
+        logging.root.removeHandler(handler)
 
-    # logging.basicConfig(level=logging.INFO, filename="log.txt")
+    logging.basicConfig(level=logging.DEBUG, filename="log.txt")
     logging.info("Starting training!")
 
     iteration = int(sys.argv[1])

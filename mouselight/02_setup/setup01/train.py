@@ -52,38 +52,38 @@ with open("train_net_names.json", "r") as f:
 def train_until(max_iteration):
 
     # get the latest checkpoint
-    if tf.train.latest_checkpoint('.'):
-        trained_until = int(tf.train.latest_checkpoint('.').split('_')[-1])
+    if tf.train.latest_checkpoint("."):
+        trained_until = int(tf.train.latest_checkpoint(".").split("_")[-1])
     else:
         trained_until = 0
         if trained_until >= max_iteration:
             return
 
     # array keys for fused volume
-    raw = gp.ArrayKey('RAW')
-    labels = gp.ArrayKey('LABELS')
-    labels_fg = gp.ArrayKey('LABELS_FG')
+    raw = gp.ArrayKey("RAW")
+    labels = gp.ArrayKey("LABELS")
+    labels_fg = gp.ArrayKey("LABELS_FG")
 
     # array keys for base volume
-    raw_base = gp.ArrayKey('RAW_BASE')
-    labels_base = gp.ArrayKey('LABELS_BASE')
-    swc_base = gp.PointsKey('SWC_BASE')
-    swc_center_base = gp.PointsKey('SWC_CENTER_BASE')
+    raw_base = gp.ArrayKey("RAW_BASE")
+    labels_base = gp.ArrayKey("LABELS_BASE")
+    swc_base = gp.PointsKey("SWC_BASE")
+    swc_center_base = gp.PointsKey("SWC_CENTER_BASE")
 
     # array keys for add volume
-    raw_add = gp.ArrayKey('RAW_ADD')
-    labels_add = gp.ArrayKey('LABELS_ADD')
-    swc_add = gp.PointsKey('SWC_ADD')
-    swc_center_add = gp.PointsKey('SWC_CENTER_ADD')
+    raw_add = gp.ArrayKey("RAW_ADD")
+    labels_add = gp.ArrayKey("LABELS_ADD")
+    swc_add = gp.PointsKey("SWC_ADD")
+    swc_center_add = gp.PointsKey("SWC_CENTER_ADD")
 
     # output data
-    fg = gp.ArrayKey('FG')
-    gradient_fg = gp.ArrayKey('GRADIENT_FG')
-    loss_weights = gp.ArrayKey('LOSS_WEIGHTS')
+    fg = gp.ArrayKey("FG")
+    gradient_fg = gp.ArrayKey("GRADIENT_FG")
+    loss_weights = gp.ArrayKey("LOSS_WEIGHTS")
 
     voxel_size = gp.Coordinate((4, 1, 1))
-    input_size = gp.Coordinate(net_config['input_shape']) * voxel_size
-    output_size = gp.Coordinate(net_config['output_shape']) * voxel_size
+    input_size = gp.Coordinate(net_config["input_shape"]) * voxel_size
+    output_size = gp.Coordinate(net_config["output_shape"]) * voxel_size
 
     # add request
     request = gp.BatchRequest()
@@ -109,28 +109,31 @@ def train_until(max_iteration):
         (
             gp.Hdf5Source(
                 filename,
-                datasets={
-                    raw_base: '/volume',
-                },
+                datasets={raw_base: "/volume"},
                 array_specs={
-                    raw_base: gp.ArraySpec(interpolatable=True, voxel_size=voxel_size, dtype=np.uint16),
+                    raw_base: gp.ArraySpec(
+                        interpolatable=True, voxel_size=voxel_size, dtype=np.uint16
+                    )
                 },
-                channels_first=False
+                channels_first=False,
             ),
             SwcSource(
                 filename=filename,
-                dataset='/reconstruction',
+                dataset="/reconstruction",
                 points=(swc_center_base, swc_base),
-                scale=voxel_size
-            )
-        ) +
-        gp.MergeProvider() +
-        gp.RandomLocation(ensure_nonempty=swc_center_base) +
-        RasterizeSkeleton(
+                scale=voxel_size,
+            ),
+        )
+        + gp.MergeProvider()
+        + gp.RandomLocation(ensure_nonempty=swc_center_base)
+        + RasterizeSkeleton(
             points=swc_base,
             array=labels_base,
-            array_spec=gp.ArraySpec(interpolatable=False, voxel_size=voxel_size, dtype=np.uint32),
-            radius=5.0)
+            array_spec=gp.ArraySpec(
+                interpolatable=False, voxel_size=voxel_size, dtype=np.uint32
+            ),
+            radius=5.0,
+        )
         for filename in files
     )
 
@@ -139,99 +142,94 @@ def train_until(max_iteration):
         (
             gp.Hdf5Source(
                 file,
-                datasets={
-                    raw_add: '/volume',
-                },
+                datasets={raw_add: "/volume"},
                 array_specs={
-                    raw_add: gp.ArraySpec(interpolatable=True, voxel_size=voxel_size, dtype=np.uint16),
+                    raw_add: gp.ArraySpec(
+                        interpolatable=True, voxel_size=voxel_size, dtype=np.uint16
+                    )
                 },
-                channels_first=False
+                channels_first=False,
             ),
             SwcSource(
                 filename=file,
-                dataset='/reconstruction',
+                dataset="/reconstruction",
                 points=(swc_center_add, swc_add),
-                scale=voxel_size
-            )
-        ) +
-        gp.MergeProvider() +
-        gp.RandomLocation(ensure_nonempty=swc_center_add) +
-        RasterizeSkeleton(points=swc_add,
-                          array=labels_add,
-                          array_spec=gp.ArraySpec(interpolatable=False, voxel_size=voxel_size, dtype=np.uint32),
-                          radius=5.0)
+                scale=voxel_size,
+            ),
+        )
+        + gp.MergeProvider()
+        + gp.RandomLocation(ensure_nonempty=swc_center_add)
+        + RasterizeSkeleton(
+            points=swc_add,
+            array=labels_add,
+            array_spec=gp.ArraySpec(
+                interpolatable=False, voxel_size=voxel_size, dtype=np.uint32
+            ),
+            radius=5.0,
+        )
         for file in files
     )
     data_sources = (
         (data_sources_base + gp.RandomProvider()),
-        (data_sources_add + gp.RandomProvider())
+        (data_sources_add + gp.RandomProvider()),
     ) + gp.MergeProvider()
 
     pipeline = (
-            data_sources +
-            FusionAugment(
-                raw_base,
-                raw_add,
-                labels_base,
-                labels_add,
-                raw,
-                labels,
-                blend_mode='labels_mask',
-                blend_smoothness=10,
-                num_blended_objects=0) +
-
-            # augment
-            gp.ElasticAugment(
-                [40,10,10],
-                [0.25,1,1],
-                [0,math.pi/2.0],
-                subsample=4) +
-            gp.SimpleAugment(mirror_only=[1, 2], transpose_only=[1, 2]) +
-            gp.Normalize(raw) +
-            gp.IntensityAugment(raw, 0.9, 1.1, -0.001, 0.001) +
-
-            BinarizeGt(labels, labels_fg) +
-            gp.BalanceLabels(labels_fg, loss_weights) +
-
-            # train
-            gp.PreCache(
-                cache_size=40,
-                num_workers=10) +
-            gp.tensorflow.Train(
-                './train_net',
-                optimizer=net_names['optimizer'],
-                loss=net_names['loss'],
-                inputs={
-                    net_names['raw']: raw,
-                    net_names['labels_fg']: labels_fg,
-                    net_names['loss_weights']: loss_weights,
-                },
-                outputs={
-                    net_names['fg']: fg,
-                },
-                gradients={
-                    net_names['fg']: gradient_fg,
-                },
-                save_every=100000) +
-
-            # visualize
-            gp.Snapshot(
-                output_filename='snapshot_{iteration}.hdf',
-                dataset_names={
-                    raw: 'volumes/raw',
-                    raw_base: 'volumes/raw_base',
-                    raw_add: 'volumes/raw_add',
-                    labels: 'volumes/labels',
-                    labels_base: 'volumes/labels_base',
-                    labels_add: 'volumes/labels_add',
-                    fg: 'volumes/fg',
-                    labels_fg: 'volumes/labels_fg',
-                    gradient_fg: 'volumes/gradient_fg',
-                },
-                additional_request=snapshot_request,
-                every=100) +
-
-            gp.PrintProfilingStats(every=100)
+        data_sources
+        + FusionAugment(
+            raw_base,
+            raw_add,
+            labels_base,
+            labels_add,
+            raw,
+            labels,
+            blend_mode="labels_mask",
+            blend_smoothness=10,
+            num_blended_objects=0,
+        )
+        +
+        # augment
+        gp.ElasticAugment([40, 10, 10], [0.25, 1, 1], [0, math.pi / 2.0], subsample=4)
+        + gp.SimpleAugment(mirror_only=[1, 2], transpose_only=[1, 2])
+        + gp.Normalize(raw)
+        + gp.IntensityAugment(raw, 0.9, 1.1, -0.001, 0.001)
+        + BinarizeGt(labels, labels_fg)
+        + gp.BalanceLabels(labels_fg, loss_weights)
+        +
+        # train
+        gp.PreCache(cache_size=40, num_workers=10)
+        + gp.tensorflow.Train(
+            "./train_net",
+            optimizer=net_names["optimizer"],
+            loss=net_names["loss"],
+            inputs={
+                net_names["raw"]: raw,
+                net_names["labels_fg"]: labels_fg,
+                net_names["loss_weights"]: loss_weights,
+            },
+            outputs={net_names["fg"]: fg},
+            gradients={net_names["fg"]: gradient_fg},
+            save_every=100000,
+        )
+        +
+        # visualize
+        gp.Snapshot(
+            output_filename="snapshot_{iteration}.hdf",
+            dataset_names={
+                raw: "volumes/raw",
+                raw_base: "volumes/raw_base",
+                raw_add: "volumes/raw_add",
+                labels: "volumes/labels",
+                labels_base: "volumes/labels_base",
+                labels_add: "volumes/labels_add",
+                fg: "volumes/fg",
+                labels_fg: "volumes/labels_fg",
+                gradient_fg: "volumes/gradient_fg",
+            },
+            additional_request=snapshot_request,
+            every=100,
+        )
+        + gp.PrintProfilingStats(every=100)
     )
 
     with gp.build(pipeline):
